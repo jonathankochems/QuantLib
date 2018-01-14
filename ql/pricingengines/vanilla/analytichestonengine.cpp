@@ -23,6 +23,8 @@
   based on fourier transformation
 */
 
+#include <ql/pricingengines/vanilla/dummy.hpp>
+
 #include <ql/math/solvers1d/brent.hpp>
 #include <ql/math/integrals/simpsonintegral.hpp>
 #include <ql/math/integrals/kronrodintegral.hpp>
@@ -34,11 +36,16 @@
 #include <ql/pricingengines/blackcalculator.hpp>
 #include <ql/pricingengines/vanilla/analytichestonengine.hpp>
 
+
 #include <boost/make_shared.hpp>
 
 #if defined(QL_PATCH_MSVC)
 #pragma warning(disable: 4180)
 #endif
+
+#include <iostream>
+#include <iomanip>      // std::setprecision
+
 
 namespace QuantLib {
 
@@ -262,8 +269,10 @@ namespace QuantLib {
         const std::complex<Real> ex = std::exp(-d*term_);
         const std::complex<Real> addOnTerm
             = engine_ ? engine_->addOnTerm(phi, term_, j_) : Real(0.0);
-
+        using std::cout;
+        using std::endl;
         if (cpxLog_ == Gatheral) {
+            //cout << "Gatheral" << endl;
             if (phi != 0.0) {
                 if (sigma_ > 1e-5) {
                     const std::complex<Real> p = (t1-d)/(t1+d);
@@ -485,12 +494,12 @@ namespace QuantLib {
         return evaluations_;
     }
 
-    void AnalyticHestonEngine::doCalculation(Real riskFreeDiscount,
-                                             Real dividendDiscount,
-                                             Real spotPrice,
-                                             Real strikePrice,
-                                             Real term,
-                                             Real kappa, Real theta, Real sigma, Real v0, Real rho,
+    void AnalyticHestonEngine::doCalculation(Real  riskFreeDiscount,
+                                             Real  dividendDiscount,
+                                             Real  spotPrice,
+                                             Real  strikePrice,
+                                             Real  term,
+                                             Real  kappa, Real theta, Real sigma, Real v0, Real rho,
                                              const TypePayoff& type,
                                              const Integration& integration,
                                              const ComplexLogFormula cpxLog,
@@ -498,13 +507,40 @@ namespace QuantLib {
                                              Real& value,
                                              Size& evaluations) {
 
+        using std::cout;
+        using std::endl;
         const Real ratio = riskFreeDiscount/dividendDiscount;
 
+         
+        cout << std::setprecision(12)
+             << "AnalyticHestonEngine" << endl
+             <<  "riskFreeDiscount: " << riskFreeDiscount << endl  
+             <<  "dividendDiscount: " << dividendDiscount << endl
+             <<  "spotPrice       : " << spotPrice << endl
+             <<  "strikePrice     : " << strikePrice << endl
+             <<  "term            : " << term << endl
+             <<  "kappa           : " << kappa << endl
+             <<  "theta           : " << theta << endl
+             <<  "sigma           : " << sigma << endl
+             <<  "v0              : " << v0 << endl
+             <<  "rho             : " << rho             << endl
+             <<  "price:"             << HestonPrice(riskFreeDiscount,
+                                                     dividendDiscount,
+                                                     spotPrice,
+                                                     strikePrice,
+                                                     term,
+                                                     kappa, 
+                                                     theta, 
+                                                     sigma, 
+                                                     v0, 
+                                                     rho) << endl;
+        
         evaluations = 0;
 
         switch(cpxLog) {
           case Gatheral:
           case BranchCorrection: {
+            cout << "BranchCorrection/Gatheral" << endl;
             const Real c_inf = std::min(0.2, std::max(0.0001,
                 std::sqrt(1.0-rho*rho)/sigma))*(v0 + kappa*theta*term);
 
@@ -534,6 +570,7 @@ namespace QuantLib {
           }
           break;
           case AndersenPiterbarg: {
+            cout << "AndersenPiterbarg" << endl;
             const Real c_inf =
                 std::sqrt(1.0-rho*rho)*(v0 + kappa*theta*term)/sigma;
 

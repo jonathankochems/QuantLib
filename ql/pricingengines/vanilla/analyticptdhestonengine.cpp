@@ -26,6 +26,8 @@
 #include <ql/pricingengines/vanilla/analyticptdhestonengine.hpp>
 #include <ql/pricingengines/blackcalculator.hpp>
 
+#include <iostream>
+
 namespace QuantLib {
 
     // helper class for integration
