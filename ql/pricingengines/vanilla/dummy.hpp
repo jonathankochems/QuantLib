@@ -1,9 +1,17 @@
-#include <ql/types.hpp>
-#include <ql/math/matrixutilities/tqreigendecomposition.hpp>
 #include <iostream>
+#include <complex>
+#include <vector>
+#include <cassert>
+#include <algorithm>
+
 #include <boost/function.hpp>
 
-namespace QuantLib {
+namespace Isolated {
+    typedef double Real;
+    typedef Real Time;
+    typedef std::size_t Size;
+    typedef int Integer;
+
     class Fj_Helper
         : public std::unary_function<Real, Real>
     {
@@ -123,16 +131,16 @@ namespace QuantLib {
 
 Real integrate( const boost::function1<Real, Real>& f) {
    using std::cout; using std::endl;
-   cout << "integrate" << endl;
+   cout << "integrate1" << endl;
 
    //TODO(JAK): this should be an input
    int intOrder = 128; int n = intOrder;
 
-   Array w_(intOrder);
-   Array x_(intOrder);
+   std::vector<Real> w_(intOrder, 0.0);
+   std::vector<Real> x_(intOrder, 0.0);
 
    // set-up matrix to compute the roots and the weights
-   Array e(n-1);
+   std::vector<Real> e(n-1);
 
    Size i;
    for (i=1; i < n; ++i) {
@@ -141,14 +149,123 @@ Real integrate( const boost::function1<Real, Real>& f) {
    }
    x_[0] = 1;
 
-   TqrEigenDecomposition tqr(
-                          x_, e,
-                          TqrEigenDecomposition::OnlyFirstRowEigenVector,
-                          TqrEigenDecomposition::Overrelaxation);
+   std::vector<std::vector<Real> > ev(1, std::vector<Real>(x_.size(), 0));
+   Size rows = 1;
+   Size columns = x_.size();
+   {//----------------------------
 
-   x_ = tqr.eigenvalues();
-   const Matrix& ev = tqr.eigenvectors();
-   
+     Size iter_(0);
+     std::vector<Real> d_(x_);
+     const std::vector<Real>& diag(x_);
+     const std::vector<Real>& sub(e);
+     std::vector<std::vector<Real> >& ev_(ev);
+
+     Size n = diag.size();
+
+     assert(n == sub.size()+1); //, "Wrong dimensions");
+
+     std::vector<Real> e(n, 0.0);
+     std::copy(sub.begin(),sub.end(),e.begin()+1);
+     for (Size i=0; i < rows; ++i) {
+         ev_[i][i] = 1.0;
+     }
+
+     for (Size k=n-1; k >=1; --k) {
+         while (!(std::fabs(d_[k-1])+std::fabs(d_[k]) == std::fabs(d_[k-1])+std::fabs(d_[k])+std::fabs(e[k]))) {
+             Size l = k;
+             while (--l > 0 && !(std::fabs(d_[l-1])+std::fabs(d_[l]) == std::fabs(d_[l-1])+std::fabs(d_[l])+std::fabs(e[l])));
+             iter_++;
+
+             Real q = d_[l];
+             if (true /*strategy != NoShift*/) {
+                 // calculated eigenvalue of 2x2 sub matrix of
+                 // [ d_[k-1] e_[k] ]
+                 // [  e_[k]  d_[k] ]
+                 // which is closer to d_[k+1].
+                 // FLOATING_POINT_EXCEPTION
+                 const Real t1 = std::sqrt(
+                                       0.25*(d_[k]*d_[k] + d_[k-1]*d_[k-1])
+                                       - 0.5*d_[k-1]*d_[k] + e[k]*e[k]);
+                 const Real t2 = 0.5*(d_[k]+d_[k-1]);
+
+                 const Real lambda =
+                     (std::fabs(t2+t1 - d_[k]) < std::fabs(t2-t1 - d_[k]))?
+                     t2+t1 : t2-t1;
+
+                 q-=((k==n-1)? 1.25 : 1.0)*lambda;
+             }
+
+             // the QR transformation
+             Real sine = 1.0;
+             Real cosine = 1.0;
+             Real u = 0.0;
+
+             bool recoverUnderflow = false;
+             for (Size i=l+1; i <= k && !recoverUnderflow; ++i) {
+                 const Real h = cosine*e[i];
+                 const Real p = sine*e[i];
+
+                 e[i-1] = std::sqrt(p*p+q*q);
+                 if (e[i-1] != 0.0) {
+                     sine = p/e[i-1];
+                     cosine = q/e[i-1];
+
+                     const Real g = d_[i-1]-u;
+                     const Real t = (d_[i]-g)*sine+2*cosine*h;
+
+                     u = sine*t;
+                     d_[i-1] = g + u;
+                     q = cosine*t - h;
+
+                     for (Size j=0; j < rows; ++j) {
+                         const Real tmp = ev_[j][i-1];
+                         ev_[j][i-1] = sine*ev_[j][i] + cosine*tmp;
+                         ev_[j][i] = cosine*ev_[j][i] - sine*tmp;
+                     }
+                 } else {
+                     // recover from underflow
+                     d_[i-1] -= u;
+                     e[l] = 0.0;
+                     recoverUnderflow = true;
+                 }
+             }
+
+             if (!recoverUnderflow) {
+                 d_[k] -= u;
+                 e[k] = q;
+                 e[l] = 0.0;
+             }
+         }
+    }
+ 
+    // sort (eigenvalues, eigenvectors),
+    // code taken from symmetricSchureDecomposition.cpp
+    std::vector<std::pair<Real, std::vector<Real> > > temp(n);
+    std::vector<Real> eigenVector(rows);
+    for (Size i=0; i<n; i++) {
+        // warning hardcoded:
+        //if (rows > 0)
+        //    std::copy(ev_[i].begin(),
+        //              ev_[i].end(), eigenVector.begin());
+        eigenVector[0] = ev_[0][i];              
+        temp[i] = std::make_pair(d_[i], eigenVector);
+    }
+    std::sort(temp.begin(), temp.end(),
+              std::greater<std::pair<Real, std::vector<Real> > >());
+    // first element is positive
+    for (Size i=0; i<n; i++) {
+        d_[i] = temp[i].first;
+        Real sign = 1.0;
+        if (rows > 0 && temp[i].second[0]<0.0)
+            sign = -1.0;
+        for (Size j=0; j<rows; ++j) {
+            ev_[j][i] = sign * temp[i].second[j];
+        }
+    }
+
+    x_ = d_;
+
+   }//---------------------------
    
    Real mu_0 = 1.0;
    for (i=0; i<n; ++i) {
@@ -166,31 +283,19 @@ Real HestonPrice(Real  riskFreeDiscount,
                  Real  dividendDiscount,
                  Real  spotPrice,
                  Real  strikePrice,
-                 Real  term,
+                 Real  Tdays,
                  Real  kappa, Real theta, Real sigma, Real v0, Real rho
                  ) {
+    Real term = Tdays/365.0;
     using std::cout; using std::endl;
     cout << "HestonPrice" << endl;
     const Real ratio = riskFreeDiscount/dividendDiscount;
-    const Real c_inf = std::min(0.2, std::max(0.0001,
-        std::sqrt(1.0-rho*rho)/sigma))*(v0 + kappa*theta*term);
-
-    //const Real p1 = integration.calculate(c_inf,
-    //    Fj_Helper(kappa, theta, sigma, v0, spotPrice, rho,
-    //              term, strikePrice, ratio, 1))/M_PI;
     const Real p1 = integrate(
         Fj_Helper(kappa, theta, sigma, v0, spotPrice, rho,
                   term, strikePrice, ratio, 1))/M_PI;
-    //int evaluations = 0;
-    //evaluations += integration.numberOfEvaluations();
-
-    //const Real p2 = integration.calculate(c_inf,
-    //    Fj_Helper(kappa, theta, sigma, v0, spotPrice, rho,
-    //              term, strikePrice, ratio, 2))/M_PI;
     const Real p2 = integrate(
         Fj_Helper(kappa, theta, sigma, v0, spotPrice, rho,
                   term, strikePrice, ratio, 2))/M_PI;
-    //evaluations += integration.numberOfEvaluations();
 
     Real value = spotPrice*dividendDiscount*(p1+0.5)
                        - strikePrice*riskFreeDiscount*(p2+0.5);

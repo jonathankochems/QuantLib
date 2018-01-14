@@ -524,11 +524,11 @@ namespace QuantLib {
              <<  "sigma           : " << sigma << endl
              <<  "v0              : " << v0 << endl
              <<  "rho             : " << rho             << endl
-             <<  "price:"             << HestonPrice(riskFreeDiscount,
+             <<  "price:"             << Isolated::HestonPrice(riskFreeDiscount,
                                                      dividendDiscount,
                                                      spotPrice,
                                                      strikePrice,
-                                                     term,
+                                                     term*365.0,
                                                      kappa, 
                                                      theta, 
                                                      sigma, 
