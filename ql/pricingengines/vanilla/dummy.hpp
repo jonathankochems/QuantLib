@@ -130,9 +130,6 @@ namespace Isolated {
     }
 
 Real integrate( const boost::function1<Real, Real>& f) {
-   using std::cout; using std::endl;
-   cout << "integrate1" << endl;
-
    //TODO(JAK): this should be an input
    int intOrder = 128; int n = intOrder;
 
@@ -287,8 +284,6 @@ Real HestonPrice(Real  riskFreeDiscount,
                  Real  kappa, Real theta, Real sigma, Real v0, Real rho
                  ) {
     Real term = Tdays/365.0;
-    using std::cout; using std::endl;
-    cout << "HestonPrice" << endl;
     const Real ratio = riskFreeDiscount/dividendDiscount;
     const Real p1 = integrate(
         Fj_Helper(kappa, theta, sigma, v0, spotPrice, rho,
